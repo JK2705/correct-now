@@ -1,0 +1,161 @@
+Privacy Policy
+Welcome to CorrectNow.
+CorrectNow is an AI-powered proofreading and writing assistance platform designed to help people communicate more clearly and confidently. When you use CorrectNow, you trust us with your personal data and your writing. We take that trust seriously.
+We generate revenue by offering paid subscriptions to our products. We do not sell, rent, or trade user content or personal data. You own what you write.
+This Privacy Policy explains how CorrectNow Technologies (“CorrectNow,” “we,” “us,” or “our”) collects, uses, stores, and shares information when you use our products, websites, and services.
+________________________________________
+When This Privacy Policy Applies
+This Privacy Policy applies when:
+•	You create an individual account with CorrectNow
+•	You use CorrectNow’s free or paid products
+•	You visit our websites or mobile applications
+•	You interact with our customer support, sales, or marketing communications
+Unless stated otherwise, this policy applies to all CorrectNow products, including browser extensions, desktop apps, mobile apps, web editors, and APIs.
+________________________________________
+When This Privacy Policy Does Not Apply
+If you use CorrectNow through an organization, company, school, or institution (for example, CorrectNow for Teams or CorrectNow for Education), your organization controls your account and data.
+In those cases:
+•	We process user content on behalf of the organization
+•	Data handling is governed by our contract with that organization
+•	This Privacy Policy does not apply to organization-managed user content
+Please contact your organization’s administrator for privacy-related requests.
+________________________________________
+How We Make Money
+CorrectNow offers both free and paid plans.
+We make money only from subscription fees.
+•	We do not sell user data
+•	We do not monetize user content
+•	We do not use user content for advertising
+________________________________________
+Information We Collect
+The information we collect depends on how you use CorrectNow and your settings.
+1. Information You Provide
+Account Information
+•	Name
+•	Email address
+•	Password
+•	Language preferences
+•	Organization name (if applicable)
+If you sign up using third-party authentication (such as Google or Apple), we collect only the information you authorize.
+Payment Information
+•	Subscription status
+•	Transaction history
+Payment card details are processed securely by third-party payment providers (such as Stripe or Razorpay). We do not store full card details.
+User Content
+•	Text you write, paste, or upload for proofreading
+•	Documents, drafts, or messages you choose to analyze
+We process this content only to provide writing assistance.
+Communications
+•	Messages you send to our support team
+•	Feedback, survey responses, or feature requests
+________________________________________
+2. Information We Collect Automatically
+Technical Information
+•	IP address
+•	Device type
+•	Browser type and version
+•	Operating system
+•	Time zone and approximate location
+Usage Data
+•	Features you use
+•	Interaction logs
+•	Performance and error logs
+•	Session duration and frequency
+Cookies and Similar Technologies
+We use cookies and similar technologies to:
+•	Maintain sessions
+•	Improve performance
+•	Analyze usage
+•	Support marketing preferences
+You can control cookies through your browser settings.
+________________________________________
+3. Information About Non-Users
+Your content may include information about people who do not use CorrectNow (for example, recipients of emails or documents).
+We use such information only to provide our services to you and never to contact or market to non-users.
+________________________________________
+4. Information From Other Sources
+We may receive limited information from:
+•	Authentication providers
+•	Payment processors
+•	Analytics services
+This information is combined with other data only to improve our services.
+________________________________________
+How We Use Information
+We use information to:
+•	Provide and personalize our products
+•	Deliver grammar, clarity, and tone suggestions
+•	Improve product performance and reliability
+•	Develop and improve AI models (subject to user controls)
+•	Process payments and manage subscriptions
+•	Communicate with you about updates and support
+•	Secure our systems and prevent fraud
+•	Comply with legal obligations
+We do not use user content for advertising.
+________________________________________
+AI Training and User Control
+CorrectNow may use anonymized or de-identified data to improve our AI systems.
+Where applicable, users can control:
+•	Whether their content is used for AI improvement
+•	Personalization settings
+We never allow third-party AI providers to train their models on identifiable user content.
+________________________________________
+When We Share Information
+We may share information only in the following situations:
+1. Service Providers
+We work with trusted providers for:
+•	Cloud hosting
+•	Payment processing
+•	Analytics
+•	Security monitoring
+These providers are bound by strict confidentiality and data protection agreements.
+________________________________________
+2. Legal and Regulatory Authorities
+We may disclose information if required to:
+•	Comply with laws or regulations
+•	Respond to legal requests
+•	Protect user safety or prevent fraud
+________________________________________
+3. Business Transfers
+If CorrectNow is involved in a merger, acquisition, or sale, user information may be transferred as part of that transaction, subject to legal protections.
+________________________________________
+4. With Your Consent
+We may share information if you explicitly authorize us to do so.
+________________________________________
+Data Security and Retention
+We use industry-standard safeguards, including:
+•	Encryption
+•	Access controls
+•	Secure infrastructure
+•	Regular security reviews
+We retain personal data only as long as necessary to:
+•	Provide our services
+•	Meet legal obligations
+•	Resolve disputes
+User content is retained according to product functionality and user settings and may be deleted or anonymized.
+________________________________________
+Your Rights and Choices
+Depending on your location, you may have the right to:
+•	Access your personal data
+•	Correct inaccurate data
+•	Delete your data
+•	Restrict or object to processing
+•	Export your data
+•	Withdraw consent
+You can manage many of these rights through your account settings or by contacting us.
+________________________________________
+International Data Transfers
+CorrectNow operates globally. Your data may be processed outside your country.
+We use appropriate safeguards, including contractual protections, to ensure lawful data transfers in accordance with applicable laws.
+________________________________________
+Children’s Privacy
+CorrectNow is not intended for children under 13 (or the minimum age required by law in your country). We do not knowingly collect data from children.
+________________________________________
+Changes to This Policy
+We may update this Privacy Policy from time to time.
+If changes are material, we will notify you via email or within the product.
+________________________________________
+Contact Information
+If you have questions about this Privacy Policy or your data, contact us at:
+Email: info@correctnow.app
+Company: CorrectNow Technologies
+________________________________________
