@@ -24,6 +24,7 @@ let originalContent = null; // Store original content for restoration
 let isCheckingInProgress = false; // Prevent concurrent checks
 let hoverTooltip = null; // Hover correction tooltip
 let currentErrors = []; // Store errors for correction
+let lastCheckedText = ''; // Store last checked text to align offsets
 
 /**
  * Escape HTML special characters
@@ -214,6 +215,9 @@ function handleCheckClick() {
     return;
   }
 
+  // Store the exact text sent to the API for accurate highlighting
+  lastCheckedText = text;
+
   // Clear any previous highlights before starting new check
   clearHighlights();
 
@@ -275,65 +279,88 @@ function handleCheckClick() {
       if (response.errors && response.errors.length > 0) {
         console.log('📨 Raw API response errors:', response.errors);
         
-        // Fix positions by searching for actual misspelled words in text
-        const fullText = currentFocusedElement.textContent || currentFocusedElement.innerText || '';
+        // Use API positions directly (clamped) and realign using `original` when provided
+        const fullText = lastCheckedText || (currentFocusedElement.value !== undefined
+          ? currentFocusedElement.value
+          : (currentFocusedElement.textContent || currentFocusedElement.innerText || ''));
         const fixedErrors = [];
-        const usedPositions = new Set(); // Track used positions to avoid overlaps
+        const usedPositions = new Set();
+
+        const findOccurrences = (text, target) => {
+          const indices = [];
+          if (!target) return indices;
+          let startIndex = 0;
+          while (startIndex < text.length) {
+            const idx = text.indexOf(target, startIndex);
+            if (idx === -1) break;
+            indices.push(idx);
+            startIndex = idx + Math.max(1, target.length);
+          }
+          return indices;
+        };
+
+        const pickClosest = (occurrences, preferredStart, length) => {
+          if (occurrences.includes(preferredStart)) return preferredStart;
+          let best = null;
+          let bestDist = Infinity;
+          occurrences.forEach((idx) => {
+            const posKey = `${idx}-${idx + length}`;
+            if (usedPositions.has(posKey)) return;
+            const dist = Math.abs(idx - preferredStart);
+            if (dist < bestDist) {
+              best = idx;
+              bestDist = dist;
+            }
+          });
+          return best;
+        };
         
         response.errors.forEach(err => {
-          if (!err.suggestion) return;
+          if (!err.suggestion || err.start === undefined || err.end === undefined) return;
           
-          // Extract the misspelled word from the position range
-          const originalWord = fullText.substring(err.start, err.end).trim();
-          
-          // Search for the misspelled word in the full text
-          const searchWord = originalWord.replace(/[^a-zA-Z]/g, ''); // Remove non-letters
-          
-          if (!searchWord) {
-            console.log('⚠️ Skipping error with no letters:', originalWord);
+          const clampedStart = Math.max(0, Math.min(err.start, fullText.length));
+          const clampedEnd = Math.max(clampedStart, Math.min(err.end, fullText.length));
+
+          if (clampedEnd <= clampedStart) {
+            console.log('⚠️ Skipping error with invalid range:', err);
             return;
           }
-          
-          // Find all occurrences
-          const regex = new RegExp(`\\b${searchWord}\\b`, 'gi');
-          let match;
-          let foundMatch = false;
-          
-          while ((match = regex.exec(fullText)) !== null) {
-            const posKey = `${match.index}-${match.index + match[0].length}`;
-            
-            // Skip if this position already has an error
-            if (usedPositions.has(posKey)) {
-              continue;
+
+          let start = clampedStart;
+          let end = clampedEnd;
+
+          const original = typeof err.original === 'string' ? err.original : '';
+          const trimmedOriginal = original.trim();
+
+          if (trimmedOriginal) {
+            let occurrences = findOccurrences(fullText, original);
+            if (occurrences.length === 0) {
+              const lowerText = fullText.toLowerCase();
+              const lowerOrig = original.toLowerCase();
+              occurrences = findOccurrences(lowerText, lowerOrig);
             }
-            
-            // Use the first unused match
-            fixedErrors.push({
-              start: match.index,
-              end: match.index + match[0].length,
-              type: err.type || 'spelling',
-              message: err.message || 'Spelling error',
-              suggestion: err.suggestion,
-            });
-            usedPositions.add(posKey);
-            console.log(`✅ Fixed position for "${searchWord}": ${match.index}-${match.index + match[0].length}`);
-            foundMatch = true;
-            break; // Only use first occurrence
-          }
-          
-          // If no match found with word boundaries, try original position
-          if (!foundMatch) {
-            const posKey = `${err.start}-${err.end}`;
-            if (!usedPositions.has(posKey)) {
-              fixedErrors.push({
-                ...err,
-                message: err.message || 'Spelling error',
-                suggestion: err.suggestion,
-              });
-              usedPositions.add(posKey);
-              console.log(`⚠️ Using original position: ${err.start}-${err.end}`);
+
+            if (occurrences.length > 0) {
+              const chosen = pickClosest(occurrences, clampedStart, original.length);
+              if (chosen !== null && chosen !== undefined) {
+                start = chosen;
+                end = Math.min(fullText.length, chosen + original.length);
+              }
             }
           }
+
+          const posKey = `${start}-${end}`;
+          if (usedPositions.has(posKey)) return;
+
+          fixedErrors.push({
+            ...err,
+            start,
+            end,
+            type: err.type || 'spelling',
+            message: err.message || 'Spelling error',
+            suggestion: err.suggestion,
+          });
+          usedPositions.add(posKey);
         });
         
         console.log('✅ Errors with corrected positions:', fixedErrors);

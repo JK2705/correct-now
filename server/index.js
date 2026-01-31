@@ -1546,32 +1546,39 @@ app.post("/api/check", async (req, res) => {
     // Import Google AI (if not already imported at top)
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const model = genAI.getGenerativeModel({
+      model: process.env.GEMINI_MODEL || "gemini-2.5-flash-lite",
+    });
 
-    const prompt = `You are a strict spelling checker. Find ONLY clear misspellings.
+    const prompt = `You are a grammar and spelling checker. Find spelling and grammar errors.
 
 Rules:
-1. Flag obvious misspellings:
+1. Flag misspellings (including common typos), even short words if context implies an error:
    - "teh"→"the", "recieve"→"receive", "wat"→"what", "cak"→"cake"
    - "helo"→"hello", "tommorow"→"tomorrow", "occured"→"occurred"
    - "haave"→"have", "writting"→"writing", "seperate"→"separate"
-2. Flag obvious grammar: "He go"→"He goes", "They was"→"They were"
-3. DO NOT flag: correct words, spacing, capitalization, punctuation, informal language
+  - "ho"→"how" when used in "ho are you"
+  - "fin"→"fine" when used in "i'm fin"
+  - "hell"→"hello" when used as a greeting
+2. Flag basic grammar: "He go"→"He goes", "They was"→"They were"
+3. Be conservative: if a word could be correct in context, do NOT flag it
+4. DO NOT flag: correct words, spacing, capitalization, punctuation, informal language
 
 Text to check:
 "${text}"
 
 For EACH error found, return valid JSON ONLY with this exact format:
-[{"start":NUMBER,"end":NUMBER,"type":"spelling","message":STRING,"suggestion":STRING}]
+[{"start":NUMBER,"end":NUMBER,"type":"spelling","message":STRING,"suggestion":STRING,"original":STRING}]
 
 Example: If text is "I have a tommorow meeting"
-Return: [{"start":10,"end":18,"type":"spelling","message":"Misspelled word","suggestion":"tomorrow"}]
+Return: [{"start":10,"end":18,"type":"spelling","message":"Misspelled word","suggestion":"tomorrow","original":"tommorow"}]
 
 If no errors, return: []
 
 IMPORTANT:
 - Count characters from position 0
 - Include BOTH start and end positions
+- The "original" field MUST exactly match the substring in the input for that range
 - Always include suggestion field - NEVER empty
 - Return ONLY valid JSON array`;
 
