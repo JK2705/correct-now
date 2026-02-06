@@ -25,6 +25,7 @@ let isCheckingInProgress = false; // Prevent concurrent checks
 let hoverTooltip = null; // Hover correction tooltip
 let currentErrors = []; // Store errors for correction
 let lastCheckedText = ''; // Store last checked text to align offsets
+let lastCorrectedText = ''; // Store last corrected text to prevent re-checking
 
 /**
  * Escape HTML special characters
@@ -215,6 +216,13 @@ function handleCheckClick() {
     return;
   }
 
+  // Check if this is the same text we just corrected - skip checking
+  if (lastCorrectedText && text === lastCorrectedText) {
+    console.log('✅ Text was just corrected, skipping check');
+    showMessage('No issues found', 'success');
+    return;
+  }
+
   // Store the exact text sent to the API for accurate highlighting
   lastCheckedText = text;
 
@@ -317,7 +325,7 @@ function handleCheckClick() {
         
         response.errors.forEach(err => {
           if (!err.suggestion || err.start === undefined || err.end === undefined) return;
-          
+
           const clampedStart = Math.max(0, Math.min(err.start, fullText.length));
           const clampedEnd = Math.max(clampedStart, Math.min(err.end, fullText.length));
 
@@ -329,15 +337,22 @@ function handleCheckClick() {
           let start = clampedStart;
           let end = clampedEnd;
 
-          const original = typeof err.original === 'string' ? err.original : '';
-          const trimmedOriginal = original.trim();
+          // Extract what's at the API position
+          const textAtPosition = fullText.substring(clampedStart, clampedEnd).trim();
+          const original = typeof err.original === 'string' ? err.original.trim() : '';
 
-          if (trimmedOriginal) {
+          console.log(`📍 API position [${clampedStart}-${clampedEnd}]: "${textAtPosition}", original: "${original}", suggestion: "${err.suggestion}"`);
+
+          // Strategy 1: If original field provided and it's in the text, use it
+          if (original && original.length > 0) {
             let occurrences = findOccurrences(fullText, original);
+
+            // Case-insensitive fallback
             if (occurrences.length === 0) {
               const lowerText = fullText.toLowerCase();
               const lowerOrig = original.toLowerCase();
-              occurrences = findOccurrences(lowerText, lowerOrig);
+              const tempOccurrences = findOccurrences(lowerText, lowerOrig);
+              occurrences = tempOccurrences.map(idx => idx); // Map back to original indices
             }
 
             if (occurrences.length > 0) {
@@ -345,8 +360,72 @@ function handleCheckClick() {
               if (chosen !== null && chosen !== undefined) {
                 start = chosen;
                 end = Math.min(fullText.length, chosen + original.length);
+                console.log(`✅ Found original "${original}" at [${start}-${end}]`);
               }
             }
+          }
+
+          // Strategy 2: If original wasn't found or not provided, try to find error word at position
+          if (start === clampedStart && end === clampedEnd) {
+            // Look for word boundaries around the API position
+            // Find start of word
+            let wordStart = clampedStart;
+            while (wordStart > 0 && /[a-zA-Z]/.test(fullText[wordStart - 1])) {
+              wordStart--;
+            }
+
+            // Find end of word
+            let wordEnd = clampedEnd;
+            while (wordEnd < fullText.length && /[a-zA-Z]/.test(fullText[wordEnd])) {
+              wordEnd++;
+            }
+
+            const wordAtPosition = fullText.substring(wordStart, wordEnd);
+
+            // If we found a valid word and it's different from what API suggested
+            if (wordAtPosition && wordAtPosition.length > 0 &&
+                wordAtPosition.toLowerCase() !== err.suggestion.toLowerCase()) {
+              start = wordStart;
+              end = wordEnd;
+              console.log(`✅ Expanded to word boundaries: "${wordAtPosition}" at [${start}-${end}]`);
+            } else {
+              // If word boundary expansion gave us the same as suggestion, skip this error
+              console.log(`⚠️ Word boundary expansion matched suggestion, skipping`);
+              return;
+            }
+          }
+
+          // Get the actual text that will be underlined
+          const actualText = fullText.substring(start, end).trim();
+          const suggestionTrimmed = err.suggestion.trim();
+
+          // Skip if the actual text and suggestion are the same (case-insensitive)
+          if (actualText.toLowerCase() === suggestionTrimmed.toLowerCase()) {
+            console.log(`⚠️ Skipping error: actual text "${actualText}" matches suggestion "${suggestionTrimmed}"`);
+            return;
+          }
+
+          // Skip if actualText is a substring of suggestion or vice versa (likely position error)
+          if (suggestionTrimmed.toLowerCase().includes(actualText.toLowerCase()) ||
+              actualText.toLowerCase().includes(suggestionTrimmed.toLowerCase())) {
+            // Only skip if they're not exactly the same (already handled above)
+            if (actualText.length < suggestionTrimmed.length / 2 ||
+                suggestionTrimmed.length < actualText.length / 2) {
+              console.log(`⚠️ Skipping error: actualText "${actualText}" and suggestion "${suggestionTrimmed}" have suspicious overlap`);
+              return;
+            }
+          }
+
+          // Skip if suggestion doesn't make sense (is a substring of a longer suggestion for different range)
+          if (suggestionTrimmed.length > 100) {
+            console.log(`⚠️ Skipping error: suggestion too long (${suggestionTrimmed.length} chars)`);
+            return;
+          }
+
+          // Skip very short matches (1-2 chars) unless it's a clear typo
+          if (actualText.length <= 2 && suggestionTrimmed.length > 3) {
+            console.log(`⚠️ Skipping error: actualText too short ("${actualText}") for suggestion "${suggestionTrimmed}"`);
+            return;
           }
 
           const posKey = `${start}-${end}`;
@@ -483,22 +562,33 @@ function highlightErrors(element, errors) {
           const span = document.createElement('span');
           span.textContent = text.substring(errStartInNode, errEndInNode);
           span.style.cssText = `
-            text-decoration: underline wavy #ef4444;
+            display: inline;
+            text-decoration: underline #ef4444;
             text-decoration-thickness: 2px;
-            text-underline-offset: 2px;
+            text-underline-offset: 4px;
             cursor: pointer;
             background-color: rgba(239, 68, 68, 0.1);
+            box-decoration-break: clone;
+            -webkit-box-decoration-break: clone;
+            white-space: normal;
+            word-wrap: break-word;
           `;
           span.title = err.message || 'Spelling error';
           span.dataset.suggestion = err.suggestion || '';
-          
-          // Add hover tooltip with delayed hide
-          span.addEventListener('mouseenter', (e) => showCorrectionTooltip(e, err));
-          span.addEventListener('mouseleave', () => {
-            // Delay hiding to allow moving to tooltip (3 seconds)
-            setTimeout(hideCorrectionTooltip, 3000);
+
+          // Add hover tooltip with proper cleanup
+          span.addEventListener('mouseenter', (e) => {
+            showCorrectionTooltip(e, err);
           });
-          
+
+          span.addEventListener('mouseleave', () => {
+            // Delay hiding to allow moving to tooltip
+            if (tooltipHideTimeout) {
+              clearTimeout(tooltipHideTimeout);
+            }
+            tooltipHideTimeout = setTimeout(hideCorrectionTooltip, 300);
+          });
+
           fragment.appendChild(span);
           lastEnd = errEndInNode;
         });
@@ -566,6 +656,9 @@ function clearHighlights() {
   currentErrors = [];
   hideCorrectionTooltip();
   hideApplyAllButton();
+
+  // Clear the last corrected text when highlights are cleared
+  lastCorrectedText = '';
 }
 
 /**
@@ -682,8 +775,8 @@ function applyAllCorrections() {
     return;
   }
   
-  // Get all error spans
-  const errorSpans = Array.from(currentFocusedElement.querySelectorAll('span[style*="underline"]'));
+  // Get all error spans (only those with our specific underline styling)
+  const errorSpans = Array.from(currentFocusedElement.querySelectorAll('span[data-suggestion][style*="text-decoration"]'));
   console.log('Found', errorSpans.length, 'error spans in DOM');
   
   if (errorSpans.length === 0) {
@@ -715,9 +808,15 @@ function applyAllCorrections() {
   if (currentFocusedElement) {
     currentFocusedElement.normalize();
     originalContent = currentFocusedElement.innerHTML;
-    console.log('📝 Updated originalContent');
+
+    // Store the corrected text to prevent re-checking
+    const correctedText = currentFocusedElement.value !== undefined
+      ? currentFocusedElement.value
+      : (currentFocusedElement.textContent || currentFocusedElement.innerText || '');
+    lastCorrectedText = correctedText;
+    console.log('📝 Updated originalContent and stored corrected text');
   }
-  
+
   // Clear state
   currentErrors = [];
   highlightedRanges = [];
@@ -734,12 +833,24 @@ function applyAllCorrections() {
 /**
  * Show correction tooltip on hover
  */
+let tooltipHideTimeout = null;
+
 function showCorrectionTooltip(event, error) {
-  hideCorrectionTooltip();
-  
+  // Clear any pending hide timeout
+  if (tooltipHideTimeout) {
+    clearTimeout(tooltipHideTimeout);
+    tooltipHideTimeout = null;
+  }
+
+  // If tooltip already exists, remove it first to show the new one
+  if (hoverTooltip) {
+    hoverTooltip.remove();
+    hoverTooltip = null;
+  }
+
   const span = event.target;
   const rect = span.getBoundingClientRect();
-  
+
   const tooltip = document.createElement('div');
   tooltip.className = 'correctnow-tooltip';
   tooltip.style.cssText = `
@@ -747,79 +858,88 @@ function showCorrectionTooltip(event, error) {
     z-index: 2147483646;
     background: white;
     border: 2px solid #ef4444;
-    border-radius: 6px;
-    padding: 8px 12px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 8px;
+    padding: 10px 14px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     font-size: 13px;
-    min-width: 120px;
+    min-width: 150px;
+    max-width: 300px;
+    pointer-events: auto;
+    transition: opacity 0.2s ease;
   `;
-  
+
   const hasSuggestion = error.suggestion && error.suggestion.trim() && error.suggestion !== 'No suggestion';
-  
+
   console.log('🎯 Showing tooltip for:', error.message, 'Suggestion:', error.suggestion, 'Has valid suggestion:', hasSuggestion);
-  
+
   tooltip.innerHTML = `
-    <div style="color: #666; font-size: 11px; margin-bottom: 4px;">${escapeHtml(error.message || 'Spelling error')}</div>
-    <div style="font-weight: 600; color: ${hasSuggestion ? '#10b981' : '#999'}; margin-bottom: 6px;">${escapeHtml(error.suggestion || 'No suggestion available')}</div>
+    <div style="color: #666; font-size: 11px; margin-bottom: 6px; line-height: 1.4;">${escapeHtml(error.message || 'Spelling error')}</div>
+    <div style="font-weight: 600; color: ${hasSuggestion ? '#10b981' : '#999'}; margin-bottom: ${hasSuggestion ? '8px' : '0'}; line-height: 1.4;">${escapeHtml(error.suggestion || 'No suggestion available')}</div>
     ${hasSuggestion ? `<button style="
       background: #10b981;
       color: white;
       border: none;
       border-radius: 4px;
-      padding: 4px 12px;
+      padding: 6px 14px;
       font-size: 12px;
       cursor: pointer;
       font-weight: 500;
       width: 100%;
-    ">Apply correction</button>` : ''}
+      transition: background 0.2s ease;
+    " onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">Apply correction</button>` : ''}
   `;
-  
+
   document.body.appendChild(tooltip);
-  
-  // Position tooltip
+
+  // Position tooltip with better centering
   const tooltipRect = tooltip.getBoundingClientRect();
-  let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-  let top = rect.bottom + 5;
-  
-  // Keep within viewport
+  let left = rect.left + window.scrollX + (rect.width / 2) - (tooltipRect.width / 2);
+  let top = rect.bottom + window.scrollY + 8;
+
+  // Keep within viewport horizontally
   if (left + tooltipRect.width > window.innerWidth - 10) {
     left = window.innerWidth - tooltipRect.width - 10;
   }
   if (left < 10) left = 10;
-  if (top + tooltipRect.height > window.innerHeight - 10) {
-    top = rect.top - tooltipRect.height - 5;
+
+  // Keep within viewport vertically - show above if no space below
+  if (top + tooltipRect.height > window.innerHeight + window.scrollY - 10) {
+    top = rect.top + window.scrollY - tooltipRect.height - 8;
   }
-  
+
   tooltip.style.left = left + 'px';
   tooltip.style.top = top + 'px';
-  
+
   // Keep tooltip visible when hovering over it
-  let tooltipHoverTimeout;
   tooltip.addEventListener('mouseenter', () => {
-    clearTimeout(tooltipHoverTimeout);
+    if (tooltipHideTimeout) {
+      clearTimeout(tooltipHideTimeout);
+      tooltipHideTimeout = null;
+    }
   });
+
   tooltip.addEventListener('mouseleave', () => {
-    tooltipHoverTimeout = setTimeout(hideCorrectionTooltip, 5000);
+    // Hide after a short delay when leaving tooltip
+    tooltipHideTimeout = setTimeout(hideCorrectionTooltip, 300);
   });
-  
-  // Hide tooltip when leaving the error span (with much longer delay)
-  span.addEventListener('mouseleave', () => {
-    tooltipHoverTimeout = setTimeout(hideCorrectionTooltip, 3000);
-  });
-  
+
   // Apply button click handler (only if suggestion exists)
   if (hasSuggestion) {
     const applyBtn = tooltip.querySelector('button');
     if (applyBtn) {
-      applyBtn.addEventListener('click', () => {
-        clearTimeout(tooltipHoverTimeout);
+      applyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (tooltipHideTimeout) {
+          clearTimeout(tooltipHideTimeout);
+          tooltipHideTimeout = null;
+        }
         applyCorrection(span, error);
         hideCorrectionTooltip();
       });
     }
   }
-  
+
   hoverTooltip = tooltip;
 }
 
@@ -827,6 +947,13 @@ function showCorrectionTooltip(event, error) {
  * Hide correction tooltip
  */
 function hideCorrectionTooltip() {
+  // Clear any pending timeout
+  if (tooltipHideTimeout) {
+    clearTimeout(tooltipHideTimeout);
+    tooltipHideTimeout = null;
+  }
+
+  // Remove tooltip if it exists
   if (hoverTooltip) {
     hoverTooltip.remove();
     hoverTooltip = null;
@@ -874,7 +1001,7 @@ function applyCorrection(span, error) {
       setTimeout(() => {
         // Remove any remaining error span styling
         if (currentFocusedElement) {
-          const errorSpans = currentFocusedElement.querySelectorAll('span[style*="underline wavy"]');
+          const errorSpans = currentFocusedElement.querySelectorAll('span[data-suggestion][style*="text-decoration"]');
           console.log('Cleaning up', errorSpans.length, 'remaining spans');
           errorSpans.forEach(s => {
             const text = document.createTextNode(s.textContent);
@@ -883,6 +1010,13 @@ function applyCorrection(span, error) {
             }
           });
           originalContent = currentFocusedElement.innerHTML;
+
+          // Store the corrected text to prevent re-checking
+          const correctedText = currentFocusedElement.value !== undefined
+            ? currentFocusedElement.value
+            : (currentFocusedElement.textContent || currentFocusedElement.innerText || '');
+          lastCorrectedText = correctedText;
+          console.log('📝 Stored corrected text after all individual corrections applied');
         }
         highlightedRanges = [];
         hideCorrectionTooltip();
@@ -985,6 +1119,69 @@ function showMessage(text, type = 'info', isDetailed = false) {
 }
 
 /**
+ * Check if click target is inside our extension UI elements
+ */
+function isClickInsideExtension(target) {
+  // Check if clicking on floating button
+  if (floatingButton && floatingButton.contains(target)) {
+    return true;
+  }
+
+  // Check if clicking on Apply All button
+  if (applyAllButton && applyAllButton.contains(target)) {
+    return true;
+  }
+
+  // Check if clicking on hover tooltip
+  if (hoverTooltip && hoverTooltip.contains(target)) {
+    return true;
+  }
+
+  // Check if clicking on an error span (underlined text)
+  if (target.closest && target.closest('span[data-suggestion][style*="text-decoration"]')) {
+    return true;
+  }
+
+  // Check if clicking on the focused element itself
+  if (currentFocusedElement && currentFocusedElement.contains(target)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Handle clicks outside extension UI to clear highlights
+ */
+function handleDocumentClick(event) {
+  // If there are no highlights, nothing to do
+  if (highlightedRanges.length === 0) {
+    return;
+  }
+
+  // Check if click is inside our extension UI
+  if (isClickInsideExtension(event.target)) {
+    console.log('🎯 Click inside extension UI, keeping highlights');
+    return;
+  }
+
+  // Click is outside - clear highlights
+  console.log('👆 Click outside extension UI, clearing highlights');
+  clearHighlights();
+}
+
+/**
+ * Handle input events to clear corrected text tracking
+ */
+function handleInput(event) {
+  // Clear the last corrected text when user types
+  if (lastCorrectedText) {
+    console.log('🔄 User is typing, clearing lastCorrectedText');
+    lastCorrectedText = '';
+  }
+}
+
+/**
  * Initialize content script
  * Attach event listeners to all input/textarea elements
  */
@@ -992,6 +1189,10 @@ function initializeContentScript() {
   // Attach to existing elements (capture phase)
   document.addEventListener('focus', handleFocus, true);
   document.addEventListener('blur', handleBlur, true);
+  document.addEventListener('input', handleInput, true);
+
+  // Handle clicks outside extension UI to clear highlights
+  document.addEventListener('click', handleDocumentClick, true);
 
   // Also listen for click events (helps with some websites)
   document.addEventListener('click', function(e) {
@@ -1002,7 +1203,7 @@ function initializeContentScript() {
 
   // NOTE: Auto-recheck on input disabled to prevent race conditions
   // Users should click the button to check, or wait for next major typing event
-  
+
   console.log('CorrectNow extension loaded - Ready to check grammar');
 }
 
